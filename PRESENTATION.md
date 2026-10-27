@@ -54,7 +54,7 @@ Send a tenant message: it still arrives. Open `useHub.ts` and show `rejoinTenant
 
 - No delivery guarantee: what was sent while disconnected is gone (hence the "you may have missed notifications" notice).
 - The user key is spoofable. The next step is JWT authentication over SignalR (the token travels in the query string for WebSockets).
-- In-memory and single instance. Several servers need a backplane (Redis or Azure SignalR Service).
+- In-memory and single instance. Several servers need a Redis backplane (or Azure SignalR Service) and a load balancer that passes WebSockets through. Without it, a broadcast on server A never reaches a tab on server B. The steps are in `SCALING-REDIS.md`.
 
 ## If something goes wrong live
 

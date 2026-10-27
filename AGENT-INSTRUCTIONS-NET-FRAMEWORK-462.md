@@ -195,7 +195,7 @@ All of these must pass. Mark each as **PASS**, **FAIL** or **NOT RUN** in your r
 
 ## 9. Out of scope
 
-Authentication, persistence, a durable queue, scale-out/backplane, new UI, migrating to a newer .NET, changing the original `server/` or `client/`, Web Push.
+Authentication, persistence, a durable queue, scale-out/backplane (see `SCALING-REDIS.md`, section 11, if a separate task asks for it), new UI, migrating to a newer .NET, changing the original `server/` or `client/`, Web Push.
 
 ## 10. Final report (send this back)
 

@@ -197,6 +197,7 @@ Quick checks that tell you where a problem is:
 - **Fewer transports**: 2.x uses WebSockets (needs IIS 8+ with the WebSocket feature on), Server-Sent Events and long polling.
 - **No built-in DI for hubs**: hubs are created by SignalR's own dependency resolver, so shared state belongs in static or singleton classes you register yourself.
 - **Maintenance**: ASP.NET SignalR 2.x is in maintenance mode. New features land in ASP.NET Core SignalR.
+- **Several servers**: use the `Microsoft.AspNet.SignalR.Redis` package (2.4.3) and `GlobalHost.DependencyResolver.UseRedis(...)` before `MapSignalR`, the same `machineKey` on every IIS server, and the load balancer rules from [SCALING-REDIS.md](SCALING-REDIS.md) (sections 5 and 11). Not part of this tutorial's steps, and untested.
 
 ## 9. Where to look when stuck
 

@@ -144,23 +144,51 @@ The background task is the same last two steps, but started from step 0: an HTTP
 | Decision | Why | Cost |
 |---|---|---|
 | Fake user key login | Keeps focus on SignalR, not auth | Spoofable by design |
-| In memory only | Smallest possible demo | Restart loses queued tasks and tenants; one instance only |
+| In memory only, one instance | Smallest possible demo | Restart loses queued tasks and tenants; scaling out needs a backplane (see [SCALING-REDIS.md](SCALING-REDIS.md)) |
 | One `ReceiveNotification` event with a `kind` | One client handler | The client branches on `kind` for labels and styles |
 | Typed hub | Event names checked at compile time | One extra interface |
 | Client re-joins tenants after reconnect | Simple, visible in the client code | A short gap between reconnecting and re-joining |
 | Plain CSS and `sonner` for toasts | No styling framework to learn | Hand-written styles |
 | Fixed ports 5080 and 5173, `strictPort` | The CORS policy lists exact origins | Changing a port means editing several files |
 
+## Running more than one instance
+
+The demo runs as **one** server. Connections live in that server's memory, so a second instance on its own would split users into islands: a broadcast sent through instance A would never reach a tab connected to instance B.
+
+```mermaid
+flowchart LR
+    LB["Load balancer<br/>(WebSocket + affinity)"]
+    LB --> A["Server A"]
+    LB --> B["Server B"]
+    A <--> R[("Redis pub/sub<br/>backplane")]
+    B <--> R
+```
+
+What the Redis backplane changes and what stays the same:
+
+| Piece | With a Redis backplane |
+|---|---|
+| `Clients.All`, `Clients.User`, `Clients.Group` | Published to Redis; every instance delivers to its own connections |
+| `IHubContext` in the worker | Same: the "Task completed" push reaches the user on any instance |
+| Hub, `QueryStringUserIdProvider`, `useHub.ts` | **No code change.** Identity comes from the `userKey` in the URL, so no instance needs to remember a user |
+| Tenant keys | Still re-joined by the client on every connect, which also covers reconnecting to a different instance |
+| `TaskQueue` | **Still per instance and in memory.** A job waiting on a stopped instance is lost |
+| Delivery guarantee | **Still none.** Redis pub/sub does not store or replay messages |
+
+Setup also needs: a load balancer that passes WebSockets through and keeps a client on one server (or a client that skips negotiation and uses WebSockets only), configurable ports, CORS origins and server address, and a Redis with a password and failover.
+
+The full steps, code, load balancer notes, the durable-queue option and a verification plan are in [SCALING-REDIS.md](SCALING-REDIS.md). That guide is documentation only and has not been run.
+
 ## Known limits
 
 - **No delivery guarantee.** Anything sent while a client is disconnected is lost. The UI says so after a reconnect.
 - **Spoofable identity.** See above.
-- **Not horizontally scalable as is.** With several server instances, a user's connection might be on a different server than the sender. That needs a backplane (Redis or Azure SignalR Service).
-- **The task queue is lost on restart.** It lives in memory.
+- **Single instance as shipped.** Several instances need a backplane and a few configuration changes. See [Running more than one instance](#running-more-than-one-instance) and [SCALING-REDIS.md](SCALING-REDIS.md).
+- **The task queue is lost on restart.** It lives in memory, and it stays per instance even with a Redis backplane.
 - **Tested in Chromium only.**
 
 ## Where to go next
 
 - JWT authentication over SignalR. WebSockets cannot set headers, so the token travels in the query string and is read in `OnMessageReceived`.
 - A persistent store, so notifications survive a restart and a client can catch up after reconnecting.
-- A backplane, to run more than one server.
+- A Redis backplane, to run more than one server. The steps are written down in [SCALING-REDIS.md](SCALING-REDIS.md).

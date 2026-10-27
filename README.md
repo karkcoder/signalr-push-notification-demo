@@ -8,6 +8,13 @@ Real-time **in-app** notifications with an ASP.NET Core SignalR server and a Rea
 
 This is not browser Web Push (no service worker, nothing when the tab is closed). Everything is in memory and the "login" is a fake user key, so it is a learning demo, not a template for production.
 
+## More documentation
+
+- [ARCHITECTURE.md](ARCHITECTURE.md): how it is built and why
+- [PRESENTATION.md](PRESENTATION.md): a 20-minute talk script
+- [SCALING-REDIS.md](SCALING-REDIS.md): running several server instances with a Redis backplane (not tested)
+- [TUTORIAL-NET-FRAMEWORK-462.md](TUTORIAL-NET-FRAMEWORK-462.md) and [AGENT-INSTRUCTIONS-NET-FRAMEWORK-462.md](AGENT-INSTRUCTIONS-NET-FRAMEWORK-462.md): porting the server to .NET Framework 4.6.2 (not tested)
+
 ## Requirements
 
 - **.NET 10 SDK** (`dotnet --version` should print `10.x`)
@@ -79,7 +86,7 @@ Things worth reading in the code:
 
 - No delivery guarantee: anything sent while a client is disconnected is lost.
 - The user key is spoofable by design. Real apps authenticate (for example JWT) and read the user id from the token.
-- State is in memory: a server restart forgets queued tasks, and one server instance only. Several instances need a backplane (Redis or Azure SignalR Service).
+- State is in memory: a server restart forgets queued tasks, and it runs as one server instance. Several instances need a Redis backplane (or Azure SignalR Service), a WebSocket-aware load balancer and a few configuration changes: see [SCALING-REDIS.md](SCALING-REDIS.md).
 
 ## Ports
 
