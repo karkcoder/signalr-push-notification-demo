@@ -6,25 +6,25 @@ import type { AppNotification, Status } from "./types";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-export function useHub(username: string) {
+export function useHub(userKey: string) {
   const [status, setStatus] = useState<Status>("connecting");
   const [connectionId, setConnectionId] = useState<string | null>(null);
   const [items, setItems] = useState<AppNotification[]>([]);
   const [unread, setUnread] = useState(0);
   const [missed, setMissed] = useState(false);
-  const [groups, setGroups] = useState<string[]>([]);
+  const [tenants, setTenants] = useState<string[]>([]);
   const [attempt, setAttempt] = useState(0); // bumping this builds a brand new connection
 
   const connRef = useRef<HubConnection | null>(null);
-  const groupsRef = useRef<string[]>([]);
+  const tenantsRef = useRef<string[]>([]);
   const seenRef = useRef<Set<string>>(new Set());
 
-  // One connection per username. The effect is written to survive React StrictMode, which
+  // One connection per user key. The effect is written to survive React StrictMode, which
   // runs mount -> cleanup -> mount in development: start() is deferred by one macrotask and
   // cancelled in cleanup, so only the second mount ever opens a real connection.
   useEffect(() => {
     let cancelled = false;
-    const url = `${SERVER}${HUB_PATH}?username=${encodeURIComponent(username)}`;
+    const url = `${SERVER}${HUB_PATH}?userKey=${encodeURIComponent(userKey)}`;
     const connection = new HubConnectionBuilder()
       .withUrl(url)
       // The default policy gives up after ~40s. A demo should keep trying forever.
@@ -43,17 +43,17 @@ export function useHub(username: string) {
       toast(kindLabel(n.kind), { id: n.id, description: n.message, duration: 5000 });
     });
 
-    // Group membership belongs to a connection id, and a reconnect gets a new one.
-    const rejoinGroups = async () => {
-      for (const g of groupsRef.current) {
-        try { await connection.invoke("JoinGroup", g); } catch { /* shown on next user action */ }
+    // Tenant membership (a SignalR group) belongs to a connection id, and a reconnect gets a new one.
+    const rejoinTenants = async () => {
+      for (const t of tenantsRef.current) {
+        try { await connection.invoke("JoinTenant", t); } catch { /* shown on next user action */ }
       }
     };
 
     connection.onreconnecting(() => setStatus("reconnecting"));
     connection.onreconnected(async () => {
       setConnectionId(connection.connectionId ?? null);
-      await rejoinGroups();
+      await rejoinTenants();
       setMissed(true);
       setStatus("connected");
     });
@@ -67,7 +67,7 @@ export function useHub(username: string) {
       }
       if (cancelled) return;
       setConnectionId(connection.connectionId ?? null);
-      await rejoinGroups();
+      await rejoinTenants();
       setStatus("connected");
     };
 
@@ -81,7 +81,7 @@ export function useHub(username: string) {
       // Wait for any in-flight start() to settle before stopping, or SignalR logs an error.
       void started.finally(() => connection.stop());
     };
-  }, [username, attempt]);
+  }, [userKey, attempt]);
 
   const invoke = useCallback(async (method: string, ...args: unknown[]) => {
     const c = connRef.current;
@@ -89,23 +89,23 @@ export function useHub(username: string) {
     await c.invoke(method, ...args);
   }, []);
 
-  const join = useCallback(async (group: string) => {
-    const g = group.trim().toLowerCase();
-    await invoke("JoinGroup", g);
-    if (!groupsRef.current.includes(g)) {
-      groupsRef.current = [...groupsRef.current, g];
-      setGroups(groupsRef.current);
+  const join = useCallback(async (tenantKey: string) => {
+    const t = tenantKey.trim().toLowerCase();
+    await invoke("JoinTenant", t);
+    if (!tenantsRef.current.includes(t)) {
+      tenantsRef.current = [...tenantsRef.current, t];
+      setTenants(tenantsRef.current);
     }
   }, [invoke]);
 
-  const leave = useCallback(async (group: string) => {
-    await invoke("LeaveGroup", group);
-    groupsRef.current = groupsRef.current.filter((x) => x !== group);
-    setGroups(groupsRef.current);
+  const leave = useCallback(async (tenantKey: string) => {
+    await invoke("LeaveTenant", tenantKey);
+    tenantsRef.current = tenantsRef.current.filter((x) => x !== tenantKey);
+    setTenants(tenantsRef.current);
   }, [invoke]);
 
   const markAllRead = useCallback(() => { setUnread(0); setMissed(false); }, []);
   const reconnect = useCallback(() => setAttempt((a) => a + 1), []);
 
-  return { status, connectionId, items, unread, missed, groups, invoke, join, leave, markAllRead, reconnect };
+  return { status, connectionId, items, unread, missed, tenants, invoke, join, leave, markAllRead, reconnect };
 }

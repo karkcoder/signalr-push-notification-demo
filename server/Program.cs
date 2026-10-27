@@ -27,11 +27,11 @@ app.MapHub<NotificationHub>("/hubs/notifications");
 // Server-originated: return 202 right away; the TaskWorker pushes "Task completed" about 10s later.
 app.MapPost("/api/tasks", async (HttpRequest request, TaskQueue queue) =>
 {
-    var username = QueryStringUserIdProvider.Normalize(request.Headers["X-Username"].ToString());
-    if (username is null) return Results.BadRequest(new { error = "Send your username in the X-Username header." });
+    var userKey = QueryStringUserIdProvider.Normalize(request.Headers["X-User-Key"].ToString());
+    if (userKey is null) return Results.BadRequest(new { error = "Send your user key in the X-User-Key header." });
 
     var taskId = Guid.NewGuid().ToString("N")[..6];
-    await queue.EnqueueAsync(new TaskJob(username, taskId));
+    await queue.EnqueueAsync(new TaskJob(userKey, taskId));
     return Results.Accepted(value: new { taskId });
 });
 

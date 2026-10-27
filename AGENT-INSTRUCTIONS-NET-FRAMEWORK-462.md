@@ -19,7 +19,7 @@ The original `server/` and `client/` must stay untouched and keep working.
 2. **Use ASP.NET SignalR 2.x** (`Microsoft.AspNet.SignalR`, version 2.4.3). Do **not** use `Microsoft.AspNetCore.SignalR`, it cannot run on .NET Framework.
 3. **Do not edit `server/` or `client/`.** Copy, then change the copy.
 4. **Do not invent features.** No database, no real authentication, no extra endpoints, no UI redesign.
-5. **Keep the fake login.** The username is only `?username=...`. Do not add JWT or cookies.
+5. **Keep the fake login.** The user key is only `?userKey=...`. Do not add JWT or cookies.
 6. **Windows is required to build.** You need Visual Studio 2019/2022 (or Build Tools) with the **.NET Framework 4.6.2 targeting pack**, and IIS Express. If you are not on Windows, or cannot build, **stop and report that** instead of writing code you cannot compile.
 7. **Never claim something works unless you ran it.** If a check could not be run, say "not run" in the report.
 
@@ -27,10 +27,10 @@ The original `server/` and `client/` must stay untouched and keep working.
 
 | File | What it tells you |
 |---|---|
-| `server/NotificationHub.cs` | Hub methods, validation, group name rules |
+| `server/NotificationHub.cs` | Hub methods, validation, tenant key rules |
 | `server/Notifications.cs` | The payload, the typed client interface, user id provider, the 10-second task worker |
 | `server/Program.cs` | CORS origins, route names, the `202` endpoint |
-| `client/src/useHub.ts` | Connection lifecycle: StrictMode safety, retry, reconnect, group re-join, de-duplication |
+| `client/src/useHub.ts` | Connection lifecycle: StrictMode safety, retry, reconnect, tenant re-join, de-duplication |
 | `client/src/App.tsx` | How the UI calls the hub and reads results |
 | `client/src/types.ts` | The payload type and constants |
 | `ARCHITECTURE.md` | Why each piece exists |
@@ -47,9 +47,9 @@ The React `App.tsx` should work with **no changes**. That means the server must 
 |---|---|
 | Server URL | `http://localhost:5080` (set the IIS Express Project URL to this) |
 | Hub | name `NotificationHub`, JS name `notificationHub`, connected at `/signalr` |
-| Task endpoint | `POST /api/tasks` with header `X-Username: <name>` |
+| Task endpoint | `POST /api/tasks` with header `X-User-Key: <name>` |
 | Task success | HTTP **202**, body `{ "taskId": "<6 chars>" }` |
-| Task missing username | HTTP **400**, body `{ "error": "Send your username in the X-Username header." }` |
+| Task missing user key | HTTP **400**, body `{ "error": "Send your user key in the X-User-Key header." }` |
 | Client origins (CORS) | `http://localhost:5173` and `http://127.0.0.1:5173`, explicit, no wildcard |
 
 ### 4.2 Hub methods (client calls server)
@@ -57,26 +57,26 @@ The React `App.tsx` should work with **no changes**. That means the server must 
 | Method | Arguments | Behaviour |
 |---|---|---|
 | `SendBroadcast` | `message` | To everyone including the sender. `kind = "broadcast"` |
-| `SendToUser` | `username`, `message` | To every connection of that user. `kind = "user"` |
-| `JoinGroup` | `group` | Add this connection to the group |
-| `LeaveGroup` | `group` | Remove it |
-| `SendToGroup` | `group`, `message` | To current members. `kind = "group"`, `group` set |
+| `SendToUser` | `userKey`, `message` | To every connection of that user. `kind = "user"` |
+| `JoinTenant` | `tenantKey` | Add this connection to the tenant |
+| `LeaveTenant` | `tenantKey` | Remove it |
+| `SendToTenant` | `tenantKey`, `message` | To current members. `kind = "tenant"`, `tenantKey` set |
 
 ### 4.3 The one event (server calls client)
 
 Event `receiveNotification` (C# method `ReceiveNotification`), payload **camelCase** JSON:
 
 ```json
-{ "id": "32 hex chars", "kind": "broadcast|user|group|task", "message": "text",
-  "from": "alice or null", "group": "team or null", "sentAt": "ISO-8601 timestamp" }
+{ "id": "32 hex chars", "kind": "broadcast|user|tenant|task", "message": "text",
+  "from": "alice or null", "tenantKey": "team or null", "sentAt": "ISO-8601 timestamp" }
 ```
 
 ### 4.4 Rules that must be identical
 
-- **Names are normalised**: trim and lower-case, for usernames (`"Alice"` and `"alice"` are the same user) and for group names.
+- **Names are normalised**: trim and lower-case, for user keys (`"Alice"` and `"alice"` are the same user) and for tenant keys.
 - **Message validation on the server**: trim; reject empty; reject longer than **280** characters (exactly 280 is allowed). Throw `HubException` with these messages: `Message is empty.` and `Message is longer than 280 characters.`
-- **Other errors**: `Pick a username to send to.` (empty target user), `Pick a group name.` (empty group), `Group name is too long.` (over 40 characters).
-- **`from`** is the caller's normalised username, or `null` if the caller has none.
+- **Other errors**: `Pick a user key to send to.` (empty target user), `Pick a tenant key.` (empty tenant), `Tenant key is too long.` (over 40 characters).
+- **`from`** is the caller's normalised user key, or `null` if the caller has none.
 - **The task**: after the 202, wait **10 seconds**, then send `kind = "task"`, `message = "Task completed (<taskId>)"`, `from = "server"` to **only the user who posted**. Two quick tasks must both complete about 10 seconds after their own start (not 10 and 20).
 - **One failing task must not crash the app.**
 
@@ -87,13 +87,13 @@ Event `receiveNotification` (C# method `ReceiveNotification`), payload **camelCa
 | `Program.cs` minimal hosting | OWIN `Startup.cs` with `[assembly: OwinStartup(...)]` |
 | `AddSignalR` + `MapHub` | `app.Map("/signalr", map => { map.UseCors(policy); map.RunSignalR(new HubConfiguration()); });` |
 | `Hub<INotificationClient>` | `Hub<INotificationClient>` (supported in 2.x) |
-| `QueryStringUserIdProvider : IUserIdProvider` | `Microsoft.AspNet.SignalR.IUserIdProvider`, registered with `GlobalHost.DependencyResolver.Register(typeof(IUserIdProvider), ...)`, reading `request.QueryString["username"]` |
+| `QueryStringUserIdProvider : IUserIdProvider` | `Microsoft.AspNet.SignalR.IUserIdProvider`, registered with `GlobalHost.DependencyResolver.Register(typeof(IUserIdProvider), ...)`, reading `request.QueryString["userKey"]` |
 | Injected `IHubContext<NotificationHub, INotificationClient>` | `GlobalHost.ConnectionManager.GetHubContext<NotificationHub, INotificationClient>()` |
 | Minimal API `MapPost` | Web API 2 `ApiController`, attribute routing, `app.UseWebApi(config)` |
 | `Channel<T>` + `BackgroundService` | `HostingEnvironment.QueueBackgroundWorkItem(async ct => ...)` |
 | camelCase JSON by default | PascalCase by default: register a `JsonSerializer` with `CamelCasePropertyNamesContractResolver` on `GlobalHost.DependencyResolver` |
 | `Groups.AddToGroupAsync` | `Groups.Add(Context.ConnectionId, name)` |
-| Caller name from `Context.UserIdentifier` | `Context.QueryString["username"]`, normalised |
+| Caller name from `Context.UserIdentifier` | `Context.QueryString["userKey"]`, normalised |
 
 NuGet packages to install (pin these versions):
 
@@ -128,8 +128,8 @@ Port `NotificationHub` from `server/NotificationHub.cs` using the mapping in sec
 **Check:** a connected client can broadcast (see Step 7 tests).
 
 ### Step 5: The task endpoint and worker
-Add `TasksController` (`POST api/tasks`) that validates the header, returns `Accepted` with the task id, and queues the work with `QueueBackgroundWorkItem`. Inside the work item: `Task.Delay(10s, ct)`, then push through `GetHubContext<NotificationHub, INotificationClient>().Clients.User(username)`. Wrap in try/catch and log (`Trace.TraceError`).
-**Check:** `curl -i -X POST http://localhost:5080/api/tasks -H "X-Username: bob"` returns 202 immediately.
+Add `TasksController` (`POST api/tasks`) that validates the header, returns `Accepted` with the task id, and queues the work with `QueueBackgroundWorkItem`. Inside the work item: `Task.Delay(10s, ct)`, then push through `GetHubContext<NotificationHub, INotificationClient>().Clients.User(user key)`. Wrap in try/catch and log (`Trace.TraceError`).
+**Check:** `curl -i -X POST http://localhost:5080/api/tasks -H "X-User-Key: bob"` returns 202 immediately.
 
 ### Step 6: Adapt the client
 1. Copy `client/` to `client-net462/`.
@@ -141,13 +141,13 @@ Add `TasksController` (`POST api/tasks`) that validates the header, returns `Acc
    import "signalr";
    ```
    If you get `jQuery is not defined`, this order is the cause.
-4. Rewrite **only** `src/useHub.ts` with the legacy API: `$.hubConnection(SERVER, { qs: { username } })`, `createHubProxy("notificationHub")`, `proxy.on("receiveNotification", ...)`, `proxy.invoke("sendBroadcast", ...)`, and the `reconnecting` / `reconnected` / `disconnected` callbacks. Keep the **same return shape** so `App.tsx` needs no change.
+4. Rewrite **only** `src/useHub.ts` with the legacy API: `$.hubConnection(SERVER, { qs: { userKey } })`, `createHubProxy("notificationHub")`, `proxy.on("receiveNotification", ...)`, `proxy.invoke("sendBroadcast", ...)`, and the `reconnecting` / `reconnected` / `disconnected` callbacks. Keep the **same return shape** so `App.tsx` needs no change.
 5. Keep these behaviours from the original hook (they exist for reasons, see `ARCHITECTURE.md`):
-   - one connection per username; build it in an effect keyed on the username
+   - one connection per user key; build it in an effect keyed on the user key
    - defer `start()` by one tick and cancel it in cleanup (React StrictMode runs the effect twice in development)
    - retry the first `start()` every 2 seconds
    - the legacy client gives up after its disconnect timeout and fires `disconnected`; call `start()` again after a short delay so it never gives up
-   - re-join remembered groups after every successful start
+   - re-join remembered tenants after every successful start
    - ignore a repeated notification id; reuse the id as the toast id
 6. Leave `App.tsx`, `types.ts` and CSS unchanged, unless a change is unavoidable. If you must change one, list the exact reason in the report.
 
@@ -167,29 +167,29 @@ All of these must pass. Mark each as **PASS**, **FAIL** or **NOT RUN** in your r
 1. Builds on .NET Framework 4.6.2 with no errors.
 2. Broadcast reaches every connection, including a user with two tabs.
 3. `SendToUser` reaches only that user, and `Alice` and `alice` are the same user.
-4. Group messages reach only current members; after `LeaveGroup` the member gets nothing. `Team` and `team` are the same group.
+4. Tenant messages reach only current members; after `LeaveTenant` the member gets nothing. `Team` and `team` are the same tenant.
 5. Empty message is rejected; 281 characters is rejected; exactly 280 is accepted. The client receives a `HubException` message.
-6. `POST /api/tasks` returns **202 in under 1 second**; without `X-Username` it returns **400**.
+6. `POST /api/tasks` returns **202 in under 1 second**; without `X-User-Key` it returns **400**.
 7. About 10 seconds after the POST, `Task completed (...)` reaches **only the poster**.
 8. Two rapid POSTs both complete about 10 seconds after their own start.
-9. The payload fields arrive in camelCase (`id`, `kind`, `message`, `from`, `group`, `sentAt`).
+9. The payload fields arrive in camelCase (`id`, `kind`, `message`, `from`, `tenantKey`, `sentAt`).
 10. CORS: `http://127.0.0.1:5173` is allowed with credentials; an unknown origin such as `http://evil.example` is not.
 
 **Client (in a real browser, two separate tabs as `alice` and `bob`)**
 11. Both tabs reach "Connected" in development mode (StrictMode on).
 12. A broadcast gives **exactly one toast and one list row per tab**.
 13. The unread badge counts up and "Mark all read" clears it.
-14. Direct message, group message and the background task work as described in `README.md` steps 3 to 6.
-15. Stop and restart the server: the pill shows "Reconnecting…", then both tabs reconnect **by themselves**, and a group message sent afterwards still reaches the other tab (groups were re-joined).
+14. Direct message, tenant message and the background task work as described in `README.md` steps 3 to 6.
+15. Stop and restart the server: the pill shows "Reconnecting…", then both tabs reconnect **by themselves**, and a tenant message sent afterwards still reaches the other tab (tenants were re-joined).
 16. Open a tab **before** the server is running: it shows "Connecting…" and connects on its own once the server starts, with no reload.
 
 ## 8. Known pitfalls (read before debugging)
 
 - **Payload fields undefined in the browser** means JSON is still PascalCase. Register the camelCase serializer (Step 2).
-- **`Clients.User(...)` reaches nobody** means the `IUserIdProvider` is not registered, or the connection has no `username` in its query string.
+- **`Clients.User(...)` reaches nobody** means the `IUserIdProvider` is not registered, or the connection has no `userKey` in its query string.
 - **CORS errors** usually mean the origin is missing from the policy, or `UseCors` is not applied to both the `/signalr` branch and the Web API branch.
 - **`QueueBackgroundWorkItem` work is lost when IIS recycles the app pool.** That is accepted for this demo; mention it, do not "fix" it with a database.
-- **Do not use `dotnet watch`-style auto-restart during acceptance tests**: a restart drops every connection and group.
+- **Do not use `dotnet watch`-style auto-restart during acceptance tests**: a restart drops every connection and tenant.
 - **Do not mix SignalR families.** A `@microsoft/signalr` client cannot connect to this server, and the legacy `signalr` client cannot connect to the Core server.
 - **The client and server must agree on case-insensitive names** (`notificationHub`, `receiveNotification`, `sendBroadcast`). A mismatch fails silently, so turn on client logging while testing (`connection.logging = true`).
 

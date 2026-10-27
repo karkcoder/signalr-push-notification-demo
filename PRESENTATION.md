@@ -30,7 +30,7 @@ Point at the unread badge and *Mark all read*.
 
 Send to `bob` only. Then open a third tab as `bob`: both bob tabs receive it. "A user can have many connections."
 Open `QueryStringUserIdProvider`. "This is why `Clients.User` works, and why the demo login is fake: anyone can claim any name."
-Groups: both windows join `team`, send to the group, then leave in one window and send again.
+Tenant keys: both windows join the tenant `team`, send to it, then leave in one window and send again.
 
 ## 5. Server-originated (4 min)
 
@@ -39,7 +39,7 @@ While waiting, open `TaskWorker`:
 
 - the request does not wait; it drops a job on a `Channel` and returns
 - the worker uses `IHubContext` because it is outside a hub: there is no `Caller`
-- the job carries the username because `HttpContext` is gone by the time it runs
+- the job carries the user key because `HttpContext` is gone by the time it runs
 - jobs run concurrently, otherwise a second task would take 20 seconds
 - an exception is caught per job, otherwise it would stop the whole host
 
@@ -48,12 +48,12 @@ About 10 seconds later "Task completed" appears in bob's window only.
 ## 6. When things break (3 min)
 
 Stop the server live. The pill goes to **Reconnecting…** and sending is disabled. Start it again: both windows recover on their own.
-Send a group message: it still arrives. Open `useHub.ts` and show `rejoinGroups`: "groups belong to a connection id, and a reconnect gets a new one."
+Send a tenant message: it still arrives. Open `useHub.ts` and show `rejoinTenants`: "tenant membership belongs to a connection id, and a reconnect gets a new one."
 
 ## 7. Limits and where to go next (2 min)
 
 - No delivery guarantee: what was sent while disconnected is gone (hence the "you may have missed notifications" notice).
-- The username is spoofable. The next step is JWT authentication over SignalR (the token travels in the query string for WebSockets).
+- The user key is spoofable. The next step is JWT authentication over SignalR (the token travels in the query string for WebSockets).
 - In-memory and single instance. Several servers need a backplane (Redis or Azure SignalR Service).
 
 ## If something goes wrong live

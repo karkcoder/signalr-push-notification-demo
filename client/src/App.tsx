@@ -15,10 +15,10 @@ const STATUS_TEXT: Record<Status, string> = {
 
 // sessionStorage (not localStorage) so every tab can be a different user.
 function loadName(): string {
-  try { return sessionStorage.getItem("username") ?? ""; } catch { return ""; }
+  try { return sessionStorage.getItem("userKey") ?? ""; } catch { return ""; }
 }
 function saveName(name: string) {
-  try { sessionStorage.setItem("username", name); } catch { /* storage unavailable */ }
+  try { sessionStorage.setItem("userKey", name); } catch { /* storage unavailable */ }
 }
 
 // The server rejects bad input with a HubException; SignalR wraps its text in a long prefix.
@@ -28,12 +28,12 @@ function reason(err: unknown): string {
   return i >= 0 ? text.slice(i + "HubException:".length).trim() : text;
 }
 
-type Target = "all" | "user" | "group";
+type Target = "all" | "user" | "tenant";
 
 export default function App() {
-  const [username, setUsername] = useState(loadName);
-  const [nameInput, setNameInput] = useState(username);
-  const hub = useHub(username);
+  const [userKey, setUserKey] = useState(loadName);
+  const [keyInput, setKeyInput] = useState(userKey);
+  const hub = useHub(userKey);
 
   const [target, setTarget] = useState<Target>("all");
   const [recipient, setRecipient] = useState("");
@@ -41,8 +41,8 @@ export default function App() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
 
-  const [groupInput, setGroupInput] = useState("");
-  const [groupError, setGroupError] = useState("");
+  const [tenantInput, setTenantInput] = useState("");
+  const [tenantError, setTenantError] = useState("");
 
   const [pending, setPending] = useState<string[]>([]);
   const [taskError, setTaskError] = useState("");
@@ -51,9 +51,9 @@ export default function App() {
 
   function login(e: FormEvent) {
     e.preventDefault();
-    const name = nameInput.trim().toLowerCase();
+    const name = keyInput.trim().toLowerCase();
     saveName(name);
-    setUsername(name); // a new username means a new connection
+    setUserKey(name); // a new user key means a new connection
   }
 
   async function send(e: FormEvent) {
@@ -65,7 +65,7 @@ export default function App() {
     try {
       if (target === "all") await hub.invoke("SendBroadcast", text);
       else if (target === "user") await hub.invoke("SendToUser", recipient, text);
-      else await hub.invoke("SendToGroup", recipient, text);
+      else await hub.invoke("SendToTenant", recipient, text);
       setMessage("");
     } catch (err) {
       setError(`Message not sent. ${reason(err)}`);
@@ -74,14 +74,14 @@ export default function App() {
     }
   }
 
-  async function groupAction(action: "join" | "leave") {
-    setGroupError("");
+  async function tenantAction(action: "join" | "leave") {
+    setTenantError("");
     try {
-      if (action === "join") await hub.join(groupInput);
-      else await hub.leave(groupInput.trim().toLowerCase());
-      setGroupInput("");
+      if (action === "join") await hub.join(tenantInput);
+      else await hub.leave(tenantInput.trim().toLowerCase());
+      setTenantInput("");
     } catch (err) {
-      setGroupError(reason(err));
+      setTenantError(reason(err));
     }
   }
 
@@ -89,7 +89,7 @@ export default function App() {
   async function startTask() {
     setTaskError("");
     try {
-      const res = await fetch(`${SERVER}/api/tasks`, { method: "POST", headers: { "X-Username": username } });
+      const res = await fetch(`${SERVER}/api/tasks`, { method: "POST", headers: { "X-User-Key": userKey } });
       if (res.status !== 202) throw new Error((await res.json().catch(() => null))?.error ?? `Server answered ${res.status}`);
       const { taskId } = await res.json();
       setPending((p) => [...p, taskId]);
@@ -99,7 +99,7 @@ export default function App() {
     }
   }
 
-  const targetPlaceholder = target === "user" ? "username" : "group name";
+  const targetPlaceholder = target === "user" ? "user key" : "tenant key";
 
   return (
     <main>
@@ -128,21 +128,21 @@ export default function App() {
       <section className="card">
         <h2>Who are you?</h2>
         <form onSubmit={login} className="row">
-          <label htmlFor="name">Username (demo only, not real login)</label>
-          <input id="name" value={nameInput} onChange={(e) => setNameInput(e.target.value)} placeholder="alice" maxLength={30} />
-          <button type="submit">Set name</button>
+          <label htmlFor="name">User key (demo only, not real login)</label>
+          <input id="name" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} placeholder="alice" maxLength={30} />
+          <button type="submit">Set key</button>
         </form>
-        <p className="muted">{username ? <>You are <strong>{username}</strong> in this tab.</> : "No name yet: you can still receive broadcasts."}</p>
+        <p className="muted">{userKey ? <>Your user key in this tab is <strong>{userKey}</strong>.</> : "No user key yet: you can still receive broadcasts."}</p>
       </section>
 
       <section className="card">
         <h2>Send a notification</h2>
         <form onSubmit={send}>
           <div className="radios" role="radiogroup" aria-label="Send to">
-            {(["all", "user", "group"] as Target[]).map((t) => (
+            {(["all", "user", "tenant"] as Target[]).map((t) => (
               <label key={t}>
                 <input type="radio" name="target" checked={target === t} onChange={() => setTarget(t)} />
-                {t === "all" ? "Everyone" : t === "user" ? "One user" : "A group"}
+                {t === "all" ? "Everyone" : t === "user" ? "One user" : "A tenant"}
               </label>
             ))}
           </div>
@@ -162,21 +162,21 @@ export default function App() {
       </section>
 
       <section className="card">
-        <h2>Groups</h2>
+        <h2>Tenants</h2>
         <div className="row">
-          <input aria-label="Group name" value={groupInput} onChange={(e) => setGroupInput(e.target.value)} placeholder="group name" />
-          <button onClick={() => groupAction("join")} disabled={!connected || !groupInput.trim()}>Join</button>
-          <button onClick={() => groupAction("leave")} disabled={!connected || !groupInput.trim()}>Leave</button>
+          <input aria-label="Tenant key" value={tenantInput} onChange={(e) => setTenantInput(e.target.value)} placeholder="tenant key" />
+          <button onClick={() => tenantAction("join")} disabled={!connected || !tenantInput.trim()}>Join</button>
+          <button onClick={() => tenantAction("leave")} disabled={!connected || !tenantInput.trim()}>Leave</button>
         </div>
-        {groupError && <p className="error" role="alert">{groupError}</p>}
-        <p className="muted">Joined: {hub.groups.length ? hub.groups.join(", ") : "none"}. Groups are re-joined automatically after a reconnect.</p>
+        {tenantError && <p className="error" role="alert">{tenantError}</p>}
+        <p className="muted">Joined: {hub.tenants.length ? hub.tenants.join(", ") : "none"}. Tenants are re-joined automatically after a reconnect.</p>
       </section>
 
       <section className="card">
         <h2>Background task</h2>
         <p className="muted">POST returns right away. The server waits about 10 seconds, then notifies only you.</p>
-        <button onClick={startTask} disabled={!username}>Start task</button>
-        {!username && <span className="muted"> Set a username first.</span>}
+        <button onClick={startTask} disabled={!userKey}>Start task</button>
+        {!userKey && <span className="muted"> Set a user key first.</span>}
         {taskError && <p className="error" role="alert">{taskError}</p>}
         {pending.map((id) => <p key={id} className="muted">Task {id} accepted, working…</p>)}
       </section>
@@ -185,8 +185,8 @@ export default function App() {
         <h2>Debug</h2>
         <dl>
           <dt>connectionId</dt><dd>{hub.connectionId ?? "—"}</dd>
-          <dt>username</dt><dd>{username || "—"}</dd>
-          <dt>groups</dt><dd>{hub.groups.join(", ") || "—"}</dd>
+          <dt>userKey</dt><dd>{userKey || "—"}</dd>
+          <dt>tenants</dt><dd>{hub.tenants.join(", ") || "—"}</dd>
         </dl>
       </section>
 
@@ -204,7 +204,7 @@ export default function App() {
                 <div className="meta">
                   <span className={`kind ${n.kind}`}>{kindLabel(n.kind)}</span>
                   {n.from && <span> from {n.from}</span>}
-                  {n.group && <span> in {n.group}</span>}
+                  {n.tenantKey && <span> in {n.tenantKey}</span>}
                   <time dateTime={n.sentAt}>
                     {new Date(n.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                   </time>

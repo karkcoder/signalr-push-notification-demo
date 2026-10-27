@@ -1,13 +1,13 @@
 // Mirrors AppNotification on the server. Named AppNotification because
 // `Notification` is already a browser global (the Web Push API this demo is NOT about).
-export type Kind = "broadcast" | "user" | "group" | "task";
+export type Kind = "broadcast" | "user" | "tenant" | "task";
 
 export interface AppNotification {
   id: string;
   kind: Kind | string;
   message: string;
   from: string | null;
-  group: string | null;
+  tenantKey: string | null;
   sentAt: string;
 }
 
@@ -16,7 +16,7 @@ export type Status = "connecting" | "connected" | "reconnecting" | "disconnected
 const KIND_LABELS: Record<string, string> = {
   broadcast: "Broadcast",
   user: "Direct",
-  group: "Group",
+  tenant: "Tenant",
   task: "Task",
 };
 

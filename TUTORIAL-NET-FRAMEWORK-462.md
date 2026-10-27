@@ -6,7 +6,7 @@ A step-by-step direction guide. It tells you **what to install, what changes and
 
 ## 0. Read this first
 
-This repo's server uses **ASP.NET Core SignalR**, which does not run on .NET Framework. On .NET Framework 4.6.2 you use the older, separate library, **ASP.NET SignalR 2.x** (NuGet package `Microsoft.AspNet.SignalR`, latest 2.4.3). It covers the same ideas (hubs, groups, users) but the API and the wire protocol are different.
+This repo's server uses **ASP.NET Core SignalR**, which does not run on .NET Framework. On .NET Framework 4.6.2 you use the older, separate library, **ASP.NET SignalR 2.x** (NuGet package `Microsoft.AspNet.SignalR`, latest 2.4.3). It covers the same ideas (hubs, tenants, users) but the API and the wire protocol are different.
 
 Two consequences:
 
@@ -94,29 +94,29 @@ The CORS policy should list the same two origins as the Core version (`http://lo
 
 ### 4.2 The hub
 
-Create `NotificationHub : Hub<INotificationClient>` with the same five methods: `SendBroadcast`, `SendToUser`, `JoinGroup`, `LeaveGroup`, `SendToGroup`.
+Create `NotificationHub : Hub<INotificationClient>` with the same five methods: `SendBroadcast`, `SendToUser`, `JoinTenant`, `LeaveTenant`, `SendToTenant`.
 
 Differences from the Core version:
 
 - Methods return `void` or `Task`; use `Groups.Add` / `Groups.Remove` (not `AddToGroupAsync`).
 - `Clients.All`, `Clients.User(id)` and `Clients.Group(name)` exist in 2.x with the same meaning.
-- Read the caller's name from the connection query string: `Context.QueryString["username"]`.
+- Read the caller's name from the connection query string: `Context.QueryString["userKey"]`.
 - `HubException` exists in `Microsoft.AspNet.SignalR` and its message reaches the client.
 - Keep the **server-side** validation (trim, empty check, 280 limit). The UI limit does not protect a direct hub call.
 
 ### 4.3 The user id provider
 
-Implement `IUserIdProvider.GetUserId(IRequest request)` and return the normalised (trimmed, lower-case) value of `request.QueryString["username"]`. It is still a fake login, for the same reason as before.
+Implement `IUserIdProvider.GetUserId(IRequest request)` and return the normalised (trimmed, lower-case) value of `request.QueryString["userKey"]`. It is still a fake login, for the same reason as before.
 
 ### 4.4 The background task (no Channel, no BackgroundService)
 
 There is no `BackgroundService` on .NET Framework. The closest simple tool is `HostingEnvironment.QueueBackgroundWorkItem`:
 
 1. A Web API `TasksController` with `[HttpPost] [Route("api/tasks")]`.
-2. Read the username from the `X-Username` header, reject a missing one with `400`.
+2. Read the user key from the `X-User-Key` header, reject a missing one with `400`.
 3. Create a short task id, call `QueueBackgroundWorkItem(async ct => { ... })`, and return `Content(HttpStatusCode.Accepted, new { taskId = id })` right away.
 4. Inside the work item: `await Task.Delay(TimeSpan.FromSeconds(10), ct)`, then
-   `GlobalHost.ConnectionManager.GetHubContext<NotificationHub, INotificationClient>().Clients.User(username).ReceiveNotification(...)`.
+   `GlobalHost.ConnectionManager.GetHubContext<NotificationHub, INotificationClient>().Clients.User(userKey).ReceiveNotification(...)`.
 5. Wrap the body in `try/catch` so one failing job cannot take the worker down.
 
 Each queued item runs on its own, so you get the "two quick tasks both finish after about 10 seconds" behaviour without extra code.
@@ -128,7 +128,7 @@ Know the limits: IIS can recycle the app pool and drop pending work (it only get
 1. Press **F5** (or **Ctrl+F5**). It starts under IIS Express on `http://localhost:5080`.
 2. Check the hub is alive by opening `http://localhost:5080/signalr/hubs` in a browser. You should see a block of generated JavaScript. A 404 means SignalR is not mapped.
 3. Check the endpoint is alive: from a terminal,
-   `curl -i -X POST http://localhost:5080/api/tasks -H "X-Username: alice"` should answer `202`.
+   `curl -i -X POST http://localhost:5080/api/tasks -H "X-User-Key: alice"` should answer `202`.
 
 ## 6. Change the React client for SignalR 2.x
 
@@ -155,7 +155,7 @@ Only the connection code changes. `App.tsx`, the CSS and the UI stay as they are
 
    | Core client (current) | SignalR 2.x client |
    |---|---|
-   | `new HubConnectionBuilder().withUrl(url).build()` | `$.hubConnection(SERVER, { qs: { username } })` |
+   | `new HubConnectionBuilder().withUrl(url).build()` | `$.hubConnection(SERVER, { qs: { userKey } })` |
    | (hub is the URL) | `connection.createHubProxy("notificationHub")` |
    | `connection.on("ReceiveNotification", fn)` | `proxy.on("receiveNotification", fn)` |
    | `connection.invoke("SendBroadcast", text)` | `proxy.invoke("sendBroadcast", text)` |
@@ -164,10 +164,10 @@ Only the connection code changes. `App.tsx`, the CSS and the UI stay as they are
    | `connection.start()` | `connection.start()` (a jQuery promise; `await` works) |
 
 4. Keep the same ideas as the current hook:
-   - Build the connection in an effect keyed on the username, and defer `start()` by one tick so React StrictMode does not open two connections.
+   - Build the connection in an effect keyed on the user key, and defer `start()` by one tick so React StrictMode does not open two connections.
    - Retry the first `start()` yourself every 2 seconds.
    - In SignalR 2.x the legacy client stops reconnecting after its disconnect timeout (about 30 seconds by default) and fires `disconnected`. Call `start()` again from that handler to keep the "never give up" behaviour.
-   - Re-join the remembered groups after **every** successful start. A fresh `start()` is a new connection and its groups are gone. (A transport-level reconnect keeps the connection id, but re-joining is harmless and simpler.)
+   - Re-join the remembered tenants after **every** successful start. A fresh `start()` is a new connection and its tenants are gone. (A transport-level reconnect keeps the connection id, but re-joining is harmless and simpler.)
    - Keep ignoring a repeated notification id.
 
 5. In `types.ts`, `SERVER` stays `http://localhost:5080`. `HUB_PATH` is no longer used because the legacy client uses `/signalr` by default.
@@ -185,9 +185,9 @@ Quick checks that tell you where a problem is:
 | `/signalr/hubs` returns 404 | `MapSignalR`/`RunSignalR` not reached, or `Microsoft.Owin.Host.SystemWeb` missing |
 | Stuck on "Connecting…" and the browser console shows a CORS error | Origin not in the policy, or `UseCors` runs after SignalR |
 | Messages arrive but fields are `undefined` | JSON still PascalCase: the camelCase resolver was not registered |
-| `Clients.User(...)` reaches nobody | `IUserIdProvider` not registered, or the `username` query string is missing |
+| `Clients.User(...)` reaches nobody | `IUserIdProvider` not registered, or the `userKey` query string is missing |
 | `jQuery is not defined` | `signalr` imported before jQuery was put on `window` |
-| Task completes but never arrives | The work item threw (check the Output window), or the username in the header does not match the connection's |
+| Task completes but never arrives | The work item threw (check the Output window), or the user key in the header does not match the connection's |
 | Pending tasks vanish | IIS recycled the app pool |
 
 ## 8. Things that behave differently from the Core version

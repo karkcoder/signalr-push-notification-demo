@@ -4,11 +4,11 @@ using Microsoft.AspNetCore.SignalR;
 namespace Server;
 
 // The one payload every notification uses, whoever triggered it.
-// "kind" tells the UI how to label it: broadcast | user | group | task.
-public record AppNotification(string Id, string Kind, string Message, string? From, string? Group, DateTimeOffset SentAt)
+// "kind" tells the UI how to label it: broadcast | user | tenant | task.
+public record AppNotification(string Id, string Kind, string Message, string? From, string? TenantKey, DateTimeOffset SentAt)
 {
-    public static AppNotification Create(string kind, string message, string? from = null, string? group = null) =>
-        new(Guid.NewGuid().ToString("N"), kind, message, from, group, DateTimeOffset.UtcNow);
+    public static AppNotification Create(string kind, string message, string? from = null, string? tenantKey = null) =>
+        new(Guid.NewGuid().ToString("N"), kind, message, from, tenantKey, DateTimeOffset.UtcNow);
 }
 
 // The methods the server can call on every client. With Hub<T> the compiler stops us
@@ -18,12 +18,12 @@ public interface INotificationClient
     Task ReceiveNotification(AppNotification notification);
 }
 
-// DEMO ONLY: the "login" is just ?username=... on the connection URL. Anyone can claim any
+// DEMO ONLY: the "login" is just ?userKey=... on the connection URL. Anyone can claim any
 // name. This is what makes Clients.User("alice") work; real apps read the user id from a JWT.
 public class QueryStringUserIdProvider : IUserIdProvider
 {
     public string? GetUserId(HubConnectionContext connection) =>
-        Normalize(connection.GetHttpContext()?.Request.Query["username"].ToString());
+        Normalize(connection.GetHttpContext()?.Request.Query["userKey"].ToString());
 
     public static string? Normalize(string? name)
     {
@@ -32,9 +32,9 @@ public class QueryStringUserIdProvider : IUserIdProvider
     }
 }
 
-// A job for the background worker. The username is captured here because HttpContext is gone
+// A job for the background worker. The user key is captured here because HttpContext is gone
 // by the time the worker runs.
-public record TaskJob(string Username, string TaskId);
+public record TaskJob(string UserKey, string TaskId);
 
 // A bounded queue between the HTTP endpoint (producer) and TaskWorker (consumer).
 public class TaskQueue
@@ -66,7 +66,7 @@ public class TaskWorker(TaskQueue queue, IHubContext<NotificationHub, INotificat
         {
             await Task.Delay(WorkTime, ct); // pretend to do real work
             // IHubContext has no Caller/Others; we target the user by name instead.
-            await hub.Clients.User(job.Username).ReceiveNotification(
+            await hub.Clients.User(job.UserKey).ReceiveNotification(
                 AppNotification.Create("task", $"Task completed ({job.TaskId})", from: "server"));
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -76,7 +76,7 @@ public class TaskWorker(TaskQueue queue, IHubContext<NotificationHub, INotificat
         catch (Exception ex)
         {
             // A failing job must not stop the host, which is the default for BackgroundService.
-            log.LogError(ex, "Task {TaskId} for {User} failed", job.TaskId, job.Username);
+            log.LogError(ex, "Task {TaskId} for {User} failed", job.TaskId, job.UserKey);
         }
     }
 }
