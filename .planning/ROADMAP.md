@@ -30,7 +30,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. The connection status on screen visibly reflects connecting, connected, reconnecting, and disconnected, and a client started before the server moves to "Connected" on its own once the server comes up, with no page refresh.
   3. Sending a message from one tab shows exactly one toast and one newest-first list entry in every open tab, including the sender's, even in React dev mode (no duplicate connections or toasts).
   4. Every notification in the list and toast carries a kind label (broadcast now; the label set already covers user, group, and task for later phases).
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 01-01-PLAN.md — Tracer: package-legitimacy gate, scaffold server and client, connect and broadcast one message end to end
+- [ ] 01-02-PLAN.md — UI contract, send-form states and failure copy, README and fresh-clone readiness
 **UI hint**: yes
 
 ### Phase 2: Identity, Targeted & Groups
