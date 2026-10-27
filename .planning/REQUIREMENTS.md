@@ -78,12 +78,33 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| CONN-01 | Phase 1 | Pending |
+| CONN-02 | Phase 1 | Pending |
+| CONN-03 | Phase 1 | Pending |
+| CONN-04 | Phase 1 | Pending |
+| BCST-01 | Phase 1 | Pending |
+| BCST-02 | Phase 1 | Pending |
+| BCST-03 | Phase 1 | Pending |
+| TRGT-01 | Phase 2 | Pending |
+| TRGT-02 | Phase 2 | Pending |
+| TRGT-03 | Phase 2 | Pending |
+| TRGT-04 | Phase 2 | Pending |
+| TASK-01 | Phase 3 | Pending |
+| TASK-02 | Phase 3 | Pending |
+| TASK-03 | Phase 3 | Pending |
+| TASK-04 | Phase 3 | Pending |
+| RSLN-01 | Phase 4 | Pending |
+| RSLN-02 | Phase 4 | Pending |
+| RSLN-03 | Phase 4 | Pending |
+| RSLN-04 | Phase 4 | Pending |
+| DOCS-01 | Phase 5 | Pending |
+| DOCS-02 | Phase 5 | Pending |
 
 **Coverage:**
-- v1 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19 ⚠️
+- v1 requirements: 21 total (corrected from 19: CONN 4, BCST 3, TRGT 4, TASK 4, RSLN 4, DOCS 2)
+- Mapped to phases: 21
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-10-26*
-*Last updated: 2026-10-26 after initial definition*
+*Last updated: 2026-10-26 after roadmap creation (traceability filled, v1 count corrected to 21)*
