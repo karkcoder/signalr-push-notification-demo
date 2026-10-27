@@ -541,14 +541,15 @@ Status/hint mapping to the UI-SPEC copy (verified strings): `connecting && retry
 | A5 | The 5 template packages flagged `too-new` by the legitimacy seam are false positives | Package Legitimacy Audit | Mitigated by the planner's checkpoint; low |
 | A6 | Port 5080 and 5173 are free on teammates' machines | Environment | Server fails with `address already in use` (verified message) / Vite exits (strictPort); README should name the ports |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Add the `127.0.0.1` origin, or tell people to use `localhost` only?**
    - Known: both work when listed (V8b); unlisted `127.0.0.1` looks like "server not running".
+   - RESOLVED: list both origins (decided in the Phase 1 plan; README still says open `localhost:5173`).
    - Recommendation: list both (it is in the code above) and still say "open `localhost:5173`" in the README. Planner/user may prefer a single origin for teaching purity; that is a discretion call, not a blocker.
-2. **`global.json` or no `global.json`?** (Pitfall 6) Recommendation: omit it and rely on the README line, unless the team wants a hard pin.
-3. **Provider vs hook-in-`App`?** ARCHITECTURE proposed a `NotificationProvider` context. The verified hook is called once from `App`; lifting it into a context later (Phase 2 debug panel, Phase 4 badge) is mechanical. Recommendation: keep the hook in `App` for Phase 1 (fewer concepts for the walking skeleton).
-4. **Server-validation error copy:** UI-SPEC's send-error text says "The connection dropped", wrong for a `HubException` rejection (rare). Keep as is or distinguish by error text; low priority.
+2. **`global.json` or no `global.json`?** (Pitfall 6) RESOLVED: omit it; README states ".NET 10 SDK" (decided in the Phase 1 plan). Recommendation: omit it and rely on the README line, unless the team wants a hard pin.
+3. **Provider vs hook-in-`App`?** RESOLVED: hook stays in `App` for Phase 1, taking `hubUrl` (decided in the Phase 1 plan). ARCHITECTURE proposed a `NotificationProvider` context. The verified hook is called once from `App`; lifting it into a context later (Phase 2 debug panel, Phase 4 badge) is mechanical. Recommendation: keep the hook in `App` for Phase 1 (fewer concepts for the walking skeleton).
+4. **Server-validation error copy:** RESOLVED: distinct copy for a server rejection, `connection dropped` kept for real drops (01-02 Task 2). UI-SPEC's send-error text says "The connection dropped", wrong for a `HubException` rejection (rare). Keep as is or distinguish by error text; low priority.
 
 ## Environment Availability
 
